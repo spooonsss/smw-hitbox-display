@@ -5,14 +5,18 @@
 
 if read1($00FFD5) == $23
 	sa1rom
+	!SA1 = 1
 	!Addr1 = $6000
 	!14C8 = $3242
 	!15EA = $33A2
+
+!maxtile_pointer_max        = $6180       ; 16 bytes
+
 else
+	!SA1 = 0
 	!Addr1 = $0000
 	!14C8 = $14C8
 	!15EA = $15EA
-endif
 
 if read1($02B625) != $22
 	error "This patch requires the 'Extended No Sprite Tile Limits' patch to use!"
@@ -20,15 +24,24 @@ else
 	!ENSTLPatchLoc = read3($02B626)
 endif
 
+endif
+
+
 org $00C569
 	JSR.w $C593
 
 org $00C56C
 autoclean JSL.l Mario
 
+if !SA1 == 0
 org $0180E2
 	JSL.l NormalSprite
 	NOP #2
+else
+org $0180E1
+	assert read1($0180E1) == $22,"Expecting this address to be patched"
+	JSL.l NormalSprite
+endif
 
 org $01F562
 	JSL.l YoshiTongue
@@ -80,13 +93,25 @@ Mario:
 	RTL
 
 NormalSprite:
+if !SA1 == 0
 	STA.w !15EA,x
+else
+	; inserted by SA-1's NoMoreSpriteTileLimits.asm org $0180D2
+	db $22 ; JSL
+	dl read3($0180E2)
+	PHA
+endif
 	LDA.w !14C8,x
 	BEQ.b +
 	JSL.l $03B6E5			; Get Sprite Clipping B
 	JSR.w Hitbox
+if !SA1 == 0
 	LDA.w !14C8,x
+endif
 +:
+if !SA1
+	PLA
+endif
 	RTL
 
 YoshiTongue:
@@ -143,7 +168,7 @@ SwapHitboxParameters:
 	LDA.b $0B
 	STA.b $09
 	LDA.b $07
-	STA.b $03	
+	STA.b $03
 	RTS
 
 Hitbox:
@@ -153,13 +178,31 @@ Hitbox:
 	PHA
 	PHX
 	PHY
+if !SA1 == 0
 	JSL.l !ENSTLPatchLoc
 	TAY
+else
+	LDA.W $0200|!Addr1
+	PHA
+	LDA.W $0201|!Addr1
+	PHA
+	LDA.W $0202|!Addr1
+	PHA
+	LDA.W $0203|!Addr1
+	PHA
+	LDA.w $0420|!Addr1
+	PHA
+
+	LDA #0
+	TAY
+endif
 	LDX.b #$01
 	BRA.b +
 
 -:
+if !SA1 == 0
 	INY #4
+endif
 	LDA.b $00
 	SEC				;\ Account for the fact that these tiles are drawn from the top left corner
 	SBC.b #$08			;/
@@ -243,11 +286,65 @@ Hitbox:
 	STA.w $0203|!Addr1,y
 	PLX
 +:
+
+if !SA1
+; ----	print "inserted at: $",hex(----)," (pc: $",hex(snestopc(----)),")"
+	LDA.w $0201|!Addr1,y
+	CMP #$F0
+	BCS +++
+
+	PHX
+
+	REP #$10
+	LDX !maxtile_pointer_max+0
+	CPX !maxtile_pointer_max+8
+	BEQ .no_slot
+	LDA $0200|!Addr1
+	STA $400000,x
+	LDA $0201|!Addr1
+	STA $400001,x
+	LDA $0202|!Addr1
+	STA $400002,x
+	LDA $0203|!Addr1
+	STA $400003,x
+
+	; Decrement slot and store back to pointer
+	DEX #4
+	STX !maxtile_pointer_max+0
+
+	LDX !maxtile_pointer_max+2
+
+	LDA $0420|!Addr1
+	STA $400000,x
+
+	; Decrement and store back to pointer
+	DEX
+	STX !maxtile_pointer_max+2
+
+.no_slot
+	SEP #$30
+	PLX
++++:
+endif
+
 	DEX
 	BMI.b +
 	JMP.w -
 
 +:
+if !SA1
+	PLA
+	STA.w $0420|!Addr1
+	PLA
+	STA.W $0203|!Addr1
+	PLA
+	STA.W $0202|!Addr1
+	PLA
+	STA.W $0201|!Addr1
+	PLA
+	STA.W $0200|!Addr1
+
+endif
 	PLY
 	PLX
 	PLA
