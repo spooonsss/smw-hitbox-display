@@ -203,24 +203,31 @@ endif
 if !SA1 == 0
 	INY #4
 endif
-	LDA.b $00
+
+	PHX
+	LDX #$01
+
+.loop_offset
+	LDA.b $00,x ; add hitbox width/height
+	CLC
+	ADC.b $02,x
+	STA.b $00,x
+	LDA.b $08,x
+	ADC.b #$00
+	STA.b $08,x
+
+	LDA.b $00,x
 	SEC				;\ Account for the fact that these tiles are drawn from the top left corner
 	SBC.b #$08			;/
-	CLC
-	ADC.b $02
-	STA.b $00
-	LDA.b $08
-	ADC.b #$00
-	STA.b $08
-	LDA.b $01
-	SEC				;\ Same here.
-	SBC.b #$08			;/
-	CLC
-	ADC.b $03
-	STA.b $01
-	LDA.b $09
-	ADC.b #$00
-	STA.b $09
+	STA.b $00,x
+	LDA.b $08,x
+	SBC.b #$00
+	STA.b $08,x
+	DEX
+	BPL .loop_offset
+
+	PLX
+
 +:
 	PHX
 	LDX.b #$00
